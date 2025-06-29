@@ -3,6 +3,15 @@ name: Deploy GKE Infrastructure
 on:
   workflow_dispatch:
     inputs:
+      terraform_action:
+        description: 'Terraform Action'
+        required: true
+        default: 'plan'
+        type: choice
+        options:
+          - plan
+          - apply
+          - destroy
       project_id:
         description: 'GCP Project ID'
         required: true
@@ -10,7 +19,7 @@ on:
       cluster_name:
         description: 'GKE Cluster Name'
         required: true
-        default: 'my-gke-cluster2'
+        default: 'my-gke-cluster'
       region:
         description: 'GCP Region'
         required: true
@@ -51,10 +60,11 @@ env:
   TF_VAR_enable_autoscaling: ${{ github.event.inputs.enable_autoscaling }}
   TF_VAR_min_nodes: ${{ github.event.inputs.min_nodes }}
   TF_VAR_max_nodes: ${{ github.event.inputs.max_nodes }}
+  TF_VAR_service_account_email: "githubactions-sa@turnkey-guild-441104-f3.iam.gserviceaccount.com"
 
 jobs:
   terraform:
-    name: 'Terraform'
+    name: 'Terraform ${{ github.event.inputs.terraform_action }}'
     runs-on: ubuntu-latest
     
     defaults:
@@ -94,9 +104,46 @@ jobs:
 
     - name: Terraform Plan
       id: plan
-      run: terraform plan -no-color -input=false
-      continue-on-error: true
+      if: github.event.inputs.terraform_action == 'plan' || github.event.inputs.terraform_action == 'apply'
+      run: |
+        terraform plan -no-color -input=false -out=tfplan
+        echo "Plan completed successfully"
+      continue-on-error: false
 
     - name: Terraform Apply
-      if: github.event.inputs.project_id != ''
-      run: terraform apply -auto-approve -input=false
+      id: apply
+      if: github.event.inputs.terraform_action == 'apply'
+      run: |
+        terraform apply -auto-approve -input=false tfplan
+        echo "Apply completed successfully"
+
+    - name: Terraform Destroy Plan
+      id: destroy_plan
+      if: github.event.inputs.terraform_action == 'destroy'
+      run: |
+        terraform plan -destroy -no-color -input=false -out=destroy-plan
+        echo "Destroy plan completed successfully"
+      continue-on-error: false
+
+    - name: Terraform Destroy
+      id: destroy
+      if: github.event.inputs.terraform_action == 'destroy'
+      run: |
+        terraform apply -auto-approve -input=false destroy-plan
+        echo "Destroy completed successfully"
+
+    - name: Output Results
+      if: always()
+      run: |
+        echo "Terraform ${{ github.event.inputs.terraform_action }} operation completed"
+        if [ "${{ github.event.inputs.terraform_action }}" = "apply" ] && [ "${{ steps.apply.outcome }}" = "success" ]; then
+          echo "GKE cluster '${{ github.event.inputs.cluster_name }}' has been created successfully!"
+          echo "Region: ${{ github.event.inputs.region }}"
+          echo "Project: ${{ github.event.inputs.project_id }}"
+        elif [ "${{ github.event.inputs.terraform_action }}" = "destroy" ] && [ "${{ steps.destroy.outcome }}" = "success" ]; then
+          echo "GKE cluster '${{ github.event.inputs.cluster_name }}' has been destroyed successfully!"
+          echo "All resources have been cleaned up."
+        elif [ "${{ github.event.inputs.terraform_action }}" = "plan" ] && [ "${{ steps.plan.outcome }}" = "success" ]; then
+          echo "Terraform plan completed successfully!"
+          echo "Review the plan output above to see what changes will be made."
+        fi

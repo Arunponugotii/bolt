@@ -19,3 +19,13 @@ output "cluster_ca_certificate" {
   value       = google_container_cluster.primary.master_auth.0.cluster_ca_certificate
   sensitive   = true
 }
+
+output "node_pool_name" {
+  description = "GKE node pool name"
+  value       = google_container_node_pool.primary_nodes.name
+}
+
+output "service_account_email" {
+  description = "Service account email used by nodes"
+  value       = var.service_account_email
+}

@@ -6,7 +6,7 @@ variable "project_id" {
 variable "cluster_name" {
   description = "The name of the GKE cluster"
   type        = string
-  default     = "my-gke-cluster2"
+  default     = "my-gke-cluster"
 }
 
 variable "region" {
@@ -49,4 +49,10 @@ variable "max_nodes" {
   description = "Maximum number of nodes in the autoscaling node pool"
   type        = number
   default     = 5
+}
+
+variable "service_account_email" {
+  description = "Service account email for GKE nodes"
+  type        = string
+  default     = "githubactions-sa@turnkey-guild-441104-f3.iam.gserviceaccount.com"
 }

@@ -57,8 +57,8 @@ resource "google_container_node_pool" "primary_nodes" {
     machine_type = var.machine_type
     disk_size_gb = var.disk_size
 
-    # Google recommends custom service accounts that have cloud-platform scope and permissions granted via IAM Roles.
-    service_account = google_service_account.gke_node_sa.email
+    # Use custom service account for GKE nodes
+    service_account = var.service_account_email
     oauth_scopes = [
       "https://www.googleapis.com/auth/cloud-platform"
     ]
@@ -78,22 +78,4 @@ resource "google_container_node_pool" "primary_nodes" {
     auto_repair  = true
     auto_upgrade = true
   }
-}
-
-resource "google_service_account" "gke_node_sa" {
-  account_id   = "${var.cluster_name}-node-sa"
-  display_name = "GKE Node Service Account"
-}
-
-resource "google_project_iam_member" "gke_node_sa_roles" {
-  for_each = toset([
-    "roles/logging.logWriter",
-    "roles/monitoring.metricWriter",
-    "roles/monitoring.viewer",
-    "roles/stackdriver.resourceMetadata.writer"
-  ])
-
-  project = var.project_id
-  role    = each.value
-  member  = "serviceAccount:${google_service_account.gke_node_sa.email}"
 }
