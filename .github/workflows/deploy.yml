@@ -15,7 +15,7 @@ on:
       project_id:
         description: 'GCP Project ID'
         required: true
-        default: '	turnkey-guild-441104-f3'
+        default: 'turnkey-guild-441104-f3'
       cluster_name:
         description: 'GKE Cluster Name'
         required: true
@@ -60,7 +60,6 @@ env:
   TF_VAR_enable_autoscaling: ${{ github.event.inputs.enable_autoscaling }}
   TF_VAR_min_nodes: ${{ github.event.inputs.min_nodes }}
   TF_VAR_max_nodes: ${{ github.event.inputs.max_nodes }}
-  TF_VAR_service_account_email: "githubactions-sa@turnkey-guild-441104-f3.iam.gserviceaccount.com"
 
 jobs:
   terraform:
@@ -89,23 +88,65 @@ jobs:
     - name: Set up Cloud SDK
       uses: google-github-actions/setup-gcloud@v2
 
-    - name: Verify Service Account and Project Access
+    - name: Verify Authentication and Project Access
       run: |
-        echo "🔐 Verifying authentication and access..."
+        echo "🔐 Verifying authentication..."
         gcloud auth list
-        gcloud config list project
+        echo ""
         echo "📋 Checking project access for: ${{ github.event.inputs.project_id }}"
-        gcloud projects describe ${{ github.event.inputs.project_id }} || echo "⚠️ Project access verification failed"
-        echo "🔧 Checking service account: githubactions-sa@turnkey-guild-441104-f3.iam.gserviceaccount.com"
-        gcloud iam service-accounts describe githubactions-sa@turnkey-guild-441104-f3.iam.gserviceaccount.com --project=turnkey-guild-441104-f3 || echo "⚠️ Service account verification failed"
+        gcloud projects describe ${{ github.event.inputs.project_id }} || {
+          echo "❌ ERROR: Cannot access project ${{ github.event.inputs.project_id }}"
+          echo "🔧 SOLUTION: Ensure the service account has the following roles on project ${{ github.event.inputs.project_id }}:"
+          echo "   • Kubernetes Engine Admin"
+          echo "   • Compute Admin" 
+          echo "   • Service Account User"
+          echo "   • Project IAM Admin (if creating service accounts)"
+          echo ""
+          echo "📋 Run these commands in Google Cloud Console:"
+          echo "gcloud projects add-iam-policy-binding ${{ github.event.inputs.project_id }} \\"
+          echo "  --member='serviceAccount:githubactions-sa@turnkey-guild-441104-f3.iam.gserviceaccount.com' \\"
+          echo "  --role='roles/container.admin'"
+          echo ""
+          echo "gcloud projects add-iam-policy-binding ${{ github.event.inputs.project_id }} \\"
+          echo "  --member='serviceAccount:githubactions-sa@turnkey-guild-441104-f3.iam.gserviceaccount.com' \\"
+          echo "  --role='roles/compute.admin'"
+          echo ""
+          echo "gcloud projects add-iam-policy-binding ${{ github.event.inputs.project_id }} \\"
+          echo "  --member='serviceAccount:githubactions-sa@turnkey-guild-441104-f3.iam.gserviceaccount.com' \\"
+          echo "  --role='roles/iam.serviceAccountUser'"
+          exit 1
+        }
+        echo "✅ Project access verified"
+
+    - name: Check Required APIs
+      run: |
+        echo "🔌 Checking required APIs..."
+        gcloud services list --enabled --project=${{ github.event.inputs.project_id }} --filter="name:container.googleapis.com OR name:compute.googleapis.com" --format="value(name)" > enabled_apis.txt
+        
+        if ! grep -q "container.googleapis.com" enabled_apis.txt; then
+          echo "❌ Kubernetes Engine API is not enabled"
+          echo "🔧 Enable it with: gcloud services enable container.googleapis.com --project=${{ github.event.inputs.project_id }}"
+          exit 1
+        fi
+        
+        if ! grep -q "compute.googleapis.com" enabled_apis.txt; then
+          echo "❌ Compute Engine API is not enabled"  
+          echo "🔧 Enable it with: gcloud services enable compute.googleapis.com --project=${{ github.event.inputs.project_id }}"
+          exit 1
+        fi
+        
+        echo "✅ Required APIs are enabled"
 
     - name: Check Regional Quotas and Resources
       run: |
         echo "📊 Checking regional quotas for ${{ github.event.inputs.region }}..."
-        gcloud compute regions describe ${{ github.event.inputs.region }} --project=${{ github.event.inputs.project_id }} || echo "⚠️ Region check failed"
-        echo "💾 Checking disk quotas (using pd-standard to avoid SSD quota issues)..."
-        gcloud compute project-info describe --project=${{ github.event.inputs.project_id }} --format="table(quotas.metric,quotas.limit,quotas.usage)" | grep -E "(SSD|PERSISTENT_DISK)" || echo "✅ Quota check completed"
+        gcloud compute regions describe ${{ github.event.inputs.region }} --project=${{ github.event.inputs.project_id }} || {
+          echo "❌ Cannot access region ${{ github.event.inputs.region }}"
+          exit 1
+        }
+        echo "💾 Using pd-standard disks to avoid SSD quota issues"
         echo "🌐 Target zones: ${{ github.event.inputs.region }}-a, ${{ github.event.inputs.region }}-c"
+        echo "✅ Region and quota check completed"
 
     - name: Terraform Format Check
       id: fmt
@@ -145,7 +186,6 @@ jobs:
         echo "🌐 Zones: ${{ github.event.inputs.region }}-a, ${{ github.event.inputs.region }}-c"
         echo "🖥️ Machine Type: ${{ github.event.inputs.machine_type }}"
         echo "💾 Disk Type: pd-standard (avoids SSD quota issues)"
-        echo "🔐 Service Account: githubactions-sa@turnkey-guild-441104-f3.iam.gserviceaccount.com"
         echo "🗑️ Deletion Protection: disabled"
         if [ "${{ github.event.inputs.enable_autoscaling }}" = "true" ]; then
           echo "📈 Autoscaling: ${{ github.event.inputs.min_nodes }}-${{ github.event.inputs.max_nodes }} nodes"
@@ -213,7 +253,6 @@ jobs:
         echo "🏷️ Cluster: ${{ github.event.inputs.cluster_name }}"
         echo "🌍 Region: ${{ github.event.inputs.region }}"
         echo "💾 Backend: GCS (terraform-statefile-bucket-tf2)"
-        echo "🔐 Service Account: githubactions-sa@turnkey-guild-441104-f3.iam.gserviceaccount.com"
         echo ""
         
         if [ "${{ github.event.inputs.terraform_action }}" = "apply" ] && [ "${{ steps.apply.outcome }}" = "success" ]; then

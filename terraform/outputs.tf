@@ -25,11 +25,6 @@ output "node_pool_name" {
   value       = google_container_node_pool.primary_nodes.name
 }
 
-output "service_account_email" {
-  description = "Service account email used by cluster and nodes"
-  value       = var.service_account_email
-}
-
 output "node_zones" {
   description = "Node zones for the cluster"
   value       = local.node_zones

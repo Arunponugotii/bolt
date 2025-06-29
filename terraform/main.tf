@@ -21,7 +21,7 @@ locals {
   ]
 }
 
-# Create the GKE cluster with custom service account
+# Create the GKE cluster
 resource "google_container_cluster" "primary" {
   name     = var.cluster_name
   location = var.region
@@ -57,17 +57,9 @@ resource "google_container_cluster" "primary" {
   # Enable logging and monitoring
   logging_service    = "logging.googleapis.com/kubernetes"
   monitoring_service = "monitoring.googleapis.com/kubernetes"
-
-  # Use custom service account for cluster operations
-  node_config {
-    service_account = var.service_account_email
-    oauth_scopes = [
-      "https://www.googleapis.com/auth/cloud-platform"
-    ]
-  }
 }
 
-# Create the node pool with custom service account
+# Create the node pool
 resource "google_container_node_pool" "primary_nodes" {
   name       = "${var.cluster_name}-node-pool"
   location   = var.region
@@ -85,8 +77,7 @@ resource "google_container_node_pool" "primary_nodes" {
     disk_size_gb = var.disk_size
     disk_type    = "pd-standard"
 
-    # Use the custom service account for node pool
-    service_account = var.service_account_email
+    # Google service account will be used automatically
     oauth_scopes = [
       "https://www.googleapis.com/auth/cloud-platform"
     ]
