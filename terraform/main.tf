@@ -13,7 +13,7 @@ provider "google" {
   region  = var.region
 }
 
-# Define local values for zones
+# Define local values for zones (a and c)
 locals {
   node_zones = [
     "${var.region}-a",
@@ -26,9 +26,11 @@ resource "google_container_cluster" "primary" {
   name     = var.cluster_name
   location = var.region
 
+  # Allow deletion without protection
+  deletion_protection = false
+
   # Specify node locations (zones) for the cluster
   node_locations = local.node_zones
-  deletion_protection = false 
 
   # We can't create a cluster with no node pool defined, but we want to only use
   # separately managed node pools. So we create the smallest possible default
@@ -81,6 +83,7 @@ resource "google_container_node_pool" "primary_nodes" {
     preemptible  = false
     machine_type = var.machine_type
     disk_size_gb = var.disk_size
+    disk_type    = "pd-standard"
 
     # Use the custom service account for node pool
     service_account = var.service_account_email

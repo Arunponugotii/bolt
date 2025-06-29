@@ -1,4 +1,4 @@
-name: Deploy GKE Infrastructure
+name: Terraform GKE Operations
 
 on:
   workflow_dispatch:
@@ -15,7 +15,7 @@ on:
       project_id:
         description: 'GCP Project ID'
         required: true
-        default: 'turnkey-guild-441104-f3'
+        default: '	turnkey-guild-441104-f3'
       cluster_name:
         description: 'GKE Cluster Name'
         required: true
@@ -73,7 +73,7 @@ jobs:
         working-directory: ./terraform
 
     steps:
-    - name: Checkout
+    - name: Checkout Repository
       uses: actions/checkout@v4
 
     - name: Setup Terraform
@@ -89,72 +89,148 @@ jobs:
     - name: Set up Cloud SDK
       uses: google-github-actions/setup-gcloud@v2
 
-    - name: Verify Service Account Access
+    - name: Verify Service Account and Project Access
       run: |
-        echo "Verifying service account access..."
+        echo "🔐 Verifying authentication and access..."
         gcloud auth list
         gcloud config list project
-        echo "Checking if custom service account exists..."
-        gcloud iam service-accounts describe githubactions-sa@turnkey-guild-441104-f3.iam.gserviceaccount.com --project=turnkey-guild-441104-f3 || echo "Service account not found in turnkey-guild-441104-f3, checking in ${{ github.event.inputs.project_id }}..."
-        gcloud iam service-accounts describe githubactions-sa@${{ github.event.inputs.project_id }}.iam.gserviceaccount.com --project=${{ github.event.inputs.project_id }} || echo "Service account verification failed"
+        echo "📋 Checking project access for: ${{ github.event.inputs.project_id }}"
+        gcloud projects describe ${{ github.event.inputs.project_id }} || echo "⚠️ Project access verification failed"
+        echo "🔧 Checking service account: githubactions-sa@turnkey-guild-441104-f3.iam.gserviceaccount.com"
+        gcloud iam service-accounts describe githubactions-sa@turnkey-guild-441104-f3.iam.gserviceaccount.com --project=turnkey-guild-441104-f3 || echo "⚠️ Service account verification failed"
 
-    - name: Terraform Format
+    - name: Check Regional Quotas and Resources
+      run: |
+        echo "📊 Checking regional quotas for ${{ github.event.inputs.region }}..."
+        gcloud compute regions describe ${{ github.event.inputs.region }} --project=${{ github.event.inputs.project_id }} || echo "⚠️ Region check failed"
+        echo "💾 Checking disk quotas (using pd-standard to avoid SSD quota issues)..."
+        gcloud compute project-info describe --project=${{ github.event.inputs.project_id }} --format="table(quotas.metric,quotas.limit,quotas.usage)" | grep -E "(SSD|PERSISTENT_DISK)" || echo "✅ Quota check completed"
+        echo "🌐 Target zones: ${{ github.event.inputs.region }}-a, ${{ github.event.inputs.region }}-c"
+
+    - name: Terraform Format Check
       id: fmt
-      run: terraform fmt -check
+      run: |
+        echo "🎨 Checking Terraform formatting..."
+        terraform fmt -check
       continue-on-error: true
 
     - name: Terraform Init
       id: init
-      run: terraform init
+      run: |
+        echo "🚀 Initializing Terraform with remote state backend..."
+        terraform init
+        echo "✅ Terraform initialized successfully"
+        echo "📦 Backend: GCS bucket terraform-statefile-bucket-tf2"
+        echo "📁 State prefix: terraform/state/gke-cluster"
 
     - name: Terraform Validate
       id: validate
-      run: terraform validate -no-color
+      run: |
+        echo "✅ Validating Terraform configuration..."
+        terraform validate -no-color
+        echo "✅ Configuration is valid"
 
+    # PLAN OPERATION
     - name: Terraform Plan
       id: plan
       if: github.event.inputs.terraform_action == 'plan' || github.event.inputs.terraform_action == 'apply'
       run: |
+        echo "📋 Creating Terraform plan..."
         terraform plan -no-color -input=false -out=tfplan
-        echo "Plan completed successfully"
+        echo "✅ Plan created successfully"
+        echo ""
+        echo "📊 PLAN SUMMARY:"
+        echo "🎯 Target: GKE cluster '${{ github.event.inputs.cluster_name }}'"
+        echo "📍 Region: ${{ github.event.inputs.region }}"
+        echo "🌐 Zones: ${{ github.event.inputs.region }}-a, ${{ github.event.inputs.region }}-c"
+        echo "🖥️ Machine Type: ${{ github.event.inputs.machine_type }}"
+        echo "💾 Disk Type: pd-standard (avoids SSD quota issues)"
+        echo "🔐 Service Account: githubactions-sa@turnkey-guild-441104-f3.iam.gserviceaccount.com"
+        echo "🗑️ Deletion Protection: disabled"
+        if [ "${{ github.event.inputs.enable_autoscaling }}" = "true" ]; then
+          echo "📈 Autoscaling: ${{ github.event.inputs.min_nodes }}-${{ github.event.inputs.max_nodes }} nodes"
+        else
+          echo "📊 Fixed Nodes: ${{ github.event.inputs.node_count }}"
+        fi
       continue-on-error: false
 
+    # APPLY OPERATION
     - name: Terraform Apply
       id: apply
       if: github.event.inputs.terraform_action == 'apply'
       run: |
+        echo "🚀 Applying Terraform configuration..."
         terraform apply -auto-approve -input=false tfplan
-        echo "Apply completed successfully"
+        echo "✅ Apply completed successfully"
+        echo ""
+        echo "🎉 INFRASTRUCTURE CREATED:"
+        echo "✅ GKE cluster '${{ github.event.inputs.cluster_name }}' is now running"
+        echo "📍 Location: ${{ github.event.inputs.region }}"
+        echo "🌐 Zones: ${{ github.event.inputs.region }}-a, ${{ github.event.inputs.region }}-c"
+        echo "💾 State stored in: terraform-statefile-bucket-tf2/terraform/state/gke-cluster"
 
+    # DESTROY OPERATIONS
     - name: Terraform Destroy Plan
       id: destroy_plan
       if: github.event.inputs.terraform_action == 'destroy'
       run: |
+        echo "🗑️ Creating destruction plan..."
         terraform plan -destroy -no-color -input=false -out=destroy-plan
-        echo "Destroy plan completed successfully"
+        echo "✅ Destroy plan created successfully"
+        echo ""
+        echo "⚠️ DESTRUCTION PLAN SUMMARY:"
+        echo "🗑️ Will destroy: GKE cluster '${{ github.event.inputs.cluster_name }}'"
+        echo "📍 Region: ${{ github.event.inputs.region }}"
+        echo "🌐 Zones: ${{ github.event.inputs.region }}-a, ${{ github.event.inputs.region }}-c"
+        echo "💾 State will be updated in: terraform-statefile-bucket-tf2"
+        echo "⚠️ This action cannot be undone!"
       continue-on-error: false
 
     - name: Terraform Destroy
       id: destroy
       if: github.event.inputs.terraform_action == 'destroy'
       run: |
-        terraform destroy -auto-approve -input=false destroy-plan
-        echo "Destroy completed successfully"
+        echo "🗑️ Destroying infrastructure..."
+        terraform apply -auto-approve -input=false destroy-plan
+        echo "✅ Destroy completed successfully"
+        echo ""
+        echo "🗑️ INFRASTRUCTURE DESTROYED:"
+        echo "✅ GKE cluster '${{ github.event.inputs.cluster_name }}' has been removed"
+        echo "✅ All node pools and associated resources cleaned up"
+        echo "✅ Zones ${{ github.event.inputs.region }}-a, ${{ github.event.inputs.region }}-c are now clean"
+        echo "💾 Remote state updated in: terraform-statefile-bucket-tf2"
+        echo "💰 All resources have been cleaned up to avoid charges"
 
-    - name: Output Results
+    # FINAL SUMMARY
+    - name: Operation Summary
       if: always()
       run: |
-        echo "Terraform ${{ github.event.inputs.terraform_action }} operation completed"
+        echo ""
+        echo "📊 TERRAFORM OPERATION SUMMARY"
+        echo "================================"
+        echo "🎯 Action: ${{ github.event.inputs.terraform_action }}"
+        echo "📍 Project: ${{ github.event.inputs.project_id }}"
+        echo "🏷️ Cluster: ${{ github.event.inputs.cluster_name }}"
+        echo "🌍 Region: ${{ github.event.inputs.region }}"
+        echo "💾 Backend: GCS (terraform-statefile-bucket-tf2)"
+        echo "🔐 Service Account: githubactions-sa@turnkey-guild-441104-f3.iam.gserviceaccount.com"
+        echo ""
+        
         if [ "${{ github.event.inputs.terraform_action }}" = "apply" ] && [ "${{ steps.apply.outcome }}" = "success" ]; then
-          echo "GKE cluster '${{ github.event.inputs.cluster_name }}' has been created successfully!"
-          echo "Region: ${{ github.event.inputs.region }}"
-          echo "Zones: ${{ github.event.inputs.region }}-a, ${{ github.event.inputs.region }}-b"
-          echo "Project: ${{ github.event.inputs.project_id }}"
-          echo "Service Account: githubactions-sa@turnkey-guild-441104-f3.iam.gserviceaccount.com"
+          echo "🎉 SUCCESS: Infrastructure has been created!"
+          echo "🔧 Next step: Configure kubectl to connect to your cluster"
+          echo "📋 Command: gcloud container clusters get-credentials ${{ github.event.inputs.cluster_name }} --region ${{ github.event.inputs.region }} --project ${{ github.event.inputs.project_id }}"
         elif [ "${{ github.event.inputs.terraform_action }}" = "destroy" ] && [ "${{ steps.destroy.outcome }}" = "success" ]; then
-          echo "GKE cluster '${{ github.event.inputs.cluster_name }}' has been destroyed successfully!"
-          echo "All resources have been cleaned up."
+          echo "🗑️ SUCCESS: Infrastructure has been destroyed!"
+          echo "💰 All resources cleaned up to avoid charges"
+          echo "🔄 You can now create new infrastructure with different configuration"
         elif [ "${{ github.event.inputs.terraform_action }}" = "plan" ] && [ "${{ steps.plan.outcome }}" = "success" ]; then
-          echo "Terraform plan completed successfully!"
-          echo "Review the plan output above to see what changes will be made."
+          echo "📋 SUCCESS: Plan has been generated!"
+          echo "👀 Review the plan output above"
+          echo "🚀 If everything looks good, run 'apply' to create the infrastructure"
+        else
+          echo "❌ Operation completed with issues - check the logs above"
         fi
+        
+        echo ""
+        echo "🔗 Workflow URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"

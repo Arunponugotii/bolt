@@ -34,3 +34,8 @@ output "node_zones" {
   description = "Node zones for the cluster"
   value       = local.node_zones
 }
+
+output "deletion_protection" {
+  description = "Deletion protection status"
+  value       = google_container_cluster.primary.deletion_protection
+}
