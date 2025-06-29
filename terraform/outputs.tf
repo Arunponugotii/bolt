@@ -27,5 +27,5 @@ output "node_pool_name" {
 
 output "service_account_email" {
   description = "Service account email used by nodes"
-  value       = data.google_service_account.existing_sa.email
+  value       = var.service_account_email
 }

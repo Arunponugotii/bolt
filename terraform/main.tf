@@ -13,12 +13,6 @@ provider "google" {
   region  = var.region
 }
 
-# Data source to get the existing service account
-data "google_service_account" "existing_sa" {
-  account_id = "githubactions-sa"
-  project    = var.project_id
-}
-
 resource "google_container_cluster" "primary" {
   name     = var.cluster_name
   location = var.region
@@ -63,8 +57,8 @@ resource "google_container_node_pool" "primary_nodes" {
     machine_type = var.machine_type
     disk_size_gb = var.disk_size
 
-    # Use the existing custom service account
-    service_account = data.google_service_account.existing_sa.email
+    # Use the hardcoded custom service account
+    service_account = var.service_account_email
     oauth_scopes = [
       "https://www.googleapis.com/auth/cloud-platform"
     ]
