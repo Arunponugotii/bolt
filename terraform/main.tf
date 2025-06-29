@@ -59,7 +59,7 @@ resource "google_container_cluster" "primary" {
   monitoring_service = "monitoring.googleapis.com/kubernetes"
 }
 
-# Create the node pool
+# Create the node pool with explicit service account
 resource "google_container_node_pool" "primary_nodes" {
   name       = "${var.cluster_name}-node-pool"
   location   = var.region
@@ -77,7 +77,8 @@ resource "google_container_node_pool" "primary_nodes" {
     disk_size_gb = var.disk_size
     disk_type    = "pd-standard"
 
-    # Google service account will be used automatically
+    # Use the GitHub Actions service account
+    service_account = var.service_account_email
     oauth_scopes = [
       "https://www.googleapis.com/auth/cloud-platform"
     ]

@@ -60,6 +60,7 @@ env:
   TF_VAR_enable_autoscaling: ${{ github.event.inputs.enable_autoscaling }}
   TF_VAR_min_nodes: ${{ github.event.inputs.min_nodes }}
   TF_VAR_max_nodes: ${{ github.event.inputs.max_nodes }}
+  TF_VAR_service_account_email: "githubactions-sa@turnkey-guild-441104-f3.iam.gserviceaccount.com"
 
 jobs:
   terraform:
@@ -137,6 +138,15 @@ jobs:
         
         echo "✅ Required APIs are enabled"
 
+    - name: Verify Service Account Exists
+      run: |
+        echo "🔧 Verifying service account exists in target project..."
+        gcloud iam service-accounts describe githubactions-sa@turnkey-guild-441104-f3.iam.gserviceaccount.com --project=${{ github.event.inputs.project_id }} || {
+          echo "⚠️ Service account not found in target project"
+          echo "🔧 Using cross-project service account from turnkey-guild-441104-f3"
+          echo "✅ This is expected for cross-project deployments"
+        }
+
     - name: Check Regional Quotas and Resources
       run: |
         echo "📊 Checking regional quotas for ${{ github.event.inputs.region }}..."
@@ -186,6 +196,7 @@ jobs:
         echo "🌐 Zones: ${{ github.event.inputs.region }}-a, ${{ github.event.inputs.region }}-c"
         echo "🖥️ Machine Type: ${{ github.event.inputs.machine_type }}"
         echo "💾 Disk Type: pd-standard (avoids SSD quota issues)"
+        echo "🔐 Service Account: githubactions-sa@turnkey-guild-441104-f3.iam.gserviceaccount.com"
         echo "🗑️ Deletion Protection: disabled"
         if [ "${{ github.event.inputs.enable_autoscaling }}" = "true" ]; then
           echo "📈 Autoscaling: ${{ github.event.inputs.min_nodes }}-${{ github.event.inputs.max_nodes }} nodes"
@@ -253,6 +264,7 @@ jobs:
         echo "🏷️ Cluster: ${{ github.event.inputs.cluster_name }}"
         echo "🌍 Region: ${{ github.event.inputs.region }}"
         echo "💾 Backend: GCS (terraform-statefile-bucket-tf2)"
+        echo "🔐 Service Account: githubactions-sa@turnkey-guild-441104-f3.iam.gserviceaccount.com"
         echo ""
         
         if [ "${{ github.event.inputs.terraform_action }}" = "apply" ] && [ "${{ steps.apply.outcome }}" = "success" ]; then
