@@ -64,7 +64,6 @@ resource "google_container_cluster" "primary" {
     ]
   }
 }
-remove_default_node_pool = true
 
 # Create the node pool with custom service account
 resource "google_container_node_pool" "primary_nodes" {
