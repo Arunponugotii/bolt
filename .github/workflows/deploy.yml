@@ -138,7 +138,7 @@ jobs:
       id: destroy
       if: github.event.inputs.terraform_action == 'destroy'
       run: |
-        terraform apply -auto-approve -input=false destroy-plan
+        terraform destroy -auto-approve -input=false destroy-plan
         echo "Destroy completed successfully"
 
     - name: Output Results
