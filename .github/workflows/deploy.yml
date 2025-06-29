@@ -27,7 +27,7 @@ on:
       node_count:
         description: 'Number of nodes'
         required: true
-        default: '3'
+        default: '2'
       machine_type:
         description: 'Machine type'
         required: true
@@ -36,19 +36,6 @@ on:
         description: 'Disk size in GB'
         required: true
         default: '100'
-      enable_autoscaling:
-        description: 'Enable autoscaling'
-        required: true
-        default: 'false'
-        type: boolean
-      min_nodes:
-        description: 'Minimum nodes (if autoscaling)'
-        required: true
-        default: '1'
-      max_nodes:
-        description: 'Maximum nodes (if autoscaling)'
-        required: true
-        default: '5'
 
 env:
   TF_VAR_project_id: ${{ github.event.inputs.project_id }}
@@ -57,9 +44,6 @@ env:
   TF_VAR_node_count: ${{ github.event.inputs.node_count }}
   TF_VAR_machine_type: ${{ github.event.inputs.machine_type }}
   TF_VAR_disk_size: ${{ github.event.inputs.disk_size }}
-  TF_VAR_enable_autoscaling: ${{ github.event.inputs.enable_autoscaling }}
-  TF_VAR_min_nodes: ${{ github.event.inputs.min_nodes }}
-  TF_VAR_max_nodes: ${{ github.event.inputs.max_nodes }}
   TF_VAR_service_account_email: "githubactions-sa@turnkey-guild-441104-f3.iam.gserviceaccount.com"
 
 jobs:
@@ -161,6 +145,7 @@ jobs:
         echo "💾 Using pd-standard disks to avoid SSD quota issues"
         echo "🌐 Target zones: ${{ github.event.inputs.region }}-a, ${{ github.event.inputs.region }}-c"
         echo "🔧 Service Account: githubactions-sa@turnkey-guild-441104-f3.iam.gserviceaccount.com"
+        echo "⚡ Simplified configuration for faster creation"
         echo "✅ Region and quota check completed"
 
     - name: Terraform Format Check
@@ -195,7 +180,7 @@ jobs:
         terraform plan -no-color -input=false -out=tfplan
         echo "✅ Plan created successfully"
         echo ""
-        echo "📊 PLAN SUMMARY:"
+        echo "📊 SIMPLIFIED PLAN SUMMARY:"
         echo "🎯 Target: GKE cluster '${{ github.event.inputs.cluster_name }}'"
         echo "📍 Region: ${{ github.event.inputs.region }}"
         echo "🌐 Zones: ${{ github.event.inputs.region }}-a, ${{ github.event.inputs.region }}-c"
@@ -203,11 +188,8 @@ jobs:
         echo "💾 Disk Type: pd-standard (avoids SSD quota issues)"
         echo "🔐 Service Account: githubactions-sa@turnkey-guild-441104-f3.iam.gserviceaccount.com"
         echo "🗑️ Deletion Protection: disabled"
-        if [ "${{ github.event.inputs.enable_autoscaling }}" = "true" ]; then
-          echo "📈 Autoscaling: ${{ github.event.inputs.min_nodes }}-${{ github.event.inputs.max_nodes }} nodes"
-        else
-          echo "📊 Fixed Nodes: ${{ github.event.inputs.node_count }}"
-        fi
+        echo "📊 Fixed Nodes: ${{ github.event.inputs.node_count }}"
+        echo "⚡ Optimized: Removed complex features for faster creation"
       continue-on-error: false
 
     # APPLY OPERATION
@@ -215,16 +197,18 @@ jobs:
       id: apply
       if: github.event.inputs.terraform_action == 'apply'
       run: |
-        echo "🚀 Applying Terraform configuration..."
+        echo "🚀 Applying simplified Terraform configuration..."
         terraform apply -auto-approve -input=false tfplan
         echo "✅ Apply completed successfully"
         echo ""
-        echo "🎉 INFRASTRUCTURE CREATED:"
+        echo "🎉 SIMPLIFIED INFRASTRUCTURE CREATED:"
         echo "✅ GKE cluster '${{ github.event.inputs.cluster_name }}' is now running"
         echo "📍 Location: ${{ github.event.inputs.region }}"
         echo "🌐 Zones: ${{ github.event.inputs.region }}-a, ${{ github.event.inputs.region }}-c"
         echo "🔐 Service Account: githubactions-sa@turnkey-guild-441104-f3.iam.gserviceaccount.com"
+        echo "📊 Nodes: ${{ github.event.inputs.node_count }} (fixed count)"
         echo "💾 State stored in: terraform-statefile-bucket-tf2/terraform/state/gke-cluster"
+        echo "⚡ Fast creation with minimal configuration"
 
     # DESTROY OPERATIONS
     - name: Terraform Destroy Plan
@@ -269,12 +253,14 @@ jobs:
         echo "📍 Project: ${{ github.event.inputs.project_id }}"
         echo "🏷️ Cluster: ${{ github.event.inputs.cluster_name }}"
         echo "🌍 Region: ${{ github.event.inputs.region }}"
+        echo "🔧 Nodes: ${{ github.event.inputs.node_count }} (fixed count)"
         echo "🔐 Service Account: githubactions-sa@turnkey-guild-441104-f3.iam.gserviceaccount.com"
         echo "💾 Backend: GCS (terraform-statefile-bucket-tf2)"
+        echo "⚡ Configuration: Simplified for fast creation"
         echo ""
         
         if [ "${{ github.event.inputs.terraform_action }}" = "apply" ] && [ "${{ steps.apply.outcome }}" = "success" ]; then
-          echo "🎉 SUCCESS: Infrastructure has been created!"
+          echo "🎉 SUCCESS: Simplified infrastructure has been created!"
           echo "🔧 Next step: Configure kubectl to connect to your cluster"
           echo "📋 Command: gcloud container clusters get-credentials ${{ github.event.inputs.cluster_name }} --region ${{ github.event.inputs.region }} --project ${{ github.event.inputs.project_id }}"
         elif [ "${{ github.event.inputs.terraform_action }}" = "destroy" ] && [ "${{ steps.destroy.outcome }}" = "success" ]; then
