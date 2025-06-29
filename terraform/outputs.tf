@@ -26,6 +26,11 @@ output "node_pool_name" {
 }
 
 output "service_account_email" {
-  description = "Service account email used by nodes"
+  description = "Service account email used by cluster and nodes"
   value       = var.service_account_email
+}
+
+output "node_zones" {
+  description = "Node zones for the cluster"
+  value       = local.node_zones
 }

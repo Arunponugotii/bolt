@@ -148,6 +148,7 @@ jobs:
         if [ "${{ github.event.inputs.terraform_action }}" = "apply" ] && [ "${{ steps.apply.outcome }}" = "success" ]; then
           echo "GKE cluster '${{ github.event.inputs.cluster_name }}' has been created successfully!"
           echo "Region: ${{ github.event.inputs.region }}"
+          echo "Zones: ${{ github.event.inputs.region }}-a, ${{ github.event.inputs.region }}-b"
           echo "Project: ${{ github.event.inputs.project_id }}"
           echo "Service Account: githubactions-sa@turnkey-guild-441104-f3.iam.gserviceaccount.com"
         elif [ "${{ github.event.inputs.terraform_action }}" = "destroy" ] && [ "${{ steps.destroy.outcome }}" = "success" ]; then

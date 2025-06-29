@@ -13,9 +13,21 @@ provider "google" {
   region  = var.region
 }
 
+# Define local values for zones
+locals {
+  node_zones = [
+    "${var.region}-a",
+    "${var.region}-b"
+  ]
+}
+
+# Create the GKE cluster with custom service account
 resource "google_container_cluster" "primary" {
   name     = var.cluster_name
   location = var.region
+
+  # Specify node locations (zones) for the cluster
+  node_locations = local.node_zones
 
   # We can't create a cluster with no node pool defined, but we want to only use
   # separately managed node pools. So we create the smallest possible default
@@ -42,22 +54,34 @@ resource "google_container_cluster" "primary" {
   # Enable logging and monitoring
   logging_service    = "logging.googleapis.com/kubernetes"
   monitoring_service = "monitoring.googleapis.com/kubernetes"
+
+  # Use custom service account for cluster operations
+  node_config {
+    service_account = var.service_account_email
+    oauth_scopes = [
+      "https://www.googleapis.com/auth/cloud-platform"
+    ]
+  }
 }
 
+# Create the node pool with custom service account
 resource "google_container_node_pool" "primary_nodes" {
   name       = "${var.cluster_name}-node-pool"
   location   = var.region
   cluster    = google_container_cluster.primary.name
   node_count = var.enable_autoscaling ? null : var.node_count
 
-  
+  # Specify node locations (zones) for the node pool
+  node_locations = local.node_zones
+
+
 
   node_config {
     preemptible  = false
     machine_type = var.machine_type
     disk_size_gb = var.disk_size
 
-    # Use the hardcoded custom service account
+    # Use the custom service account for node pool
     service_account = var.service_account_email
     oauth_scopes = [
       "https://www.googleapis.com/auth/cloud-platform"
