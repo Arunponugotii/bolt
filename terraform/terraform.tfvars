@@ -1,5 +1,5 @@
 project_id = "turnkey-guild-441104-f3"
-cluster_name = "my-gke-cluster"
+cluster_name = "my-gke-cluster2"
 region = "us-central1"
 node_count = 3
 machine_type = "e2-medium"

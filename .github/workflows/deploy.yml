@@ -10,7 +10,7 @@ on:
       cluster_name:
         description: 'GKE Cluster Name'
         required: true
-        default: 'my-gke-cluster'
+        default: 'my-gke-cluster2'
       region:
         description: 'GCP Region'
         required: true
