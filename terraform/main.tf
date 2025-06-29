@@ -17,7 +17,7 @@ provider "google" {
 locals {
   node_zones = [
     "${var.region}-a",
-    "${var.region}-b"
+    "${var.region}-c"
   ]
 }
 
