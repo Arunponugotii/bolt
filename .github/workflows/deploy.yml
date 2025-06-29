@@ -60,7 +60,6 @@ env:
   TF_VAR_enable_autoscaling: ${{ github.event.inputs.enable_autoscaling }}
   TF_VAR_min_nodes: ${{ github.event.inputs.min_nodes }}
   TF_VAR_max_nodes: ${{ github.event.inputs.max_nodes }}
-  TF_VAR_service_account_email: "githubactions-sa@turnkey-guild-441104-f3.iam.gserviceaccount.com"
 
 jobs:
   terraform:
@@ -88,6 +87,13 @@ jobs:
 
     - name: Set up Cloud SDK
       uses: google-github-actions/setup-gcloud@v2
+
+    - name: Verify Service Account Access
+      run: |
+        echo "Verifying service account access..."
+        gcloud auth list
+        gcloud config list project
+        gcloud iam service-accounts describe githubactions-sa@${{ github.event.inputs.project_id }}.iam.gserviceaccount.com --project=${{ github.event.inputs.project_id }}
 
     - name: Terraform Format
       id: fmt
@@ -140,6 +146,7 @@ jobs:
           echo "GKE cluster '${{ github.event.inputs.cluster_name }}' has been created successfully!"
           echo "Region: ${{ github.event.inputs.region }}"
           echo "Project: ${{ github.event.inputs.project_id }}"
+          echo "Service Account: githubactions-sa@${{ github.event.inputs.project_id }}.iam.gserviceaccount.com"
         elif [ "${{ github.event.inputs.terraform_action }}" = "destroy" ] && [ "${{ steps.destroy.outcome }}" = "success" ]; then
           echo "GKE cluster '${{ github.event.inputs.cluster_name }}' has been destroyed successfully!"
           echo "All resources have been cleaned up."
