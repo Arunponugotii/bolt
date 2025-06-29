@@ -98,9 +98,9 @@ jobs:
         gcloud projects describe ${{ github.event.inputs.project_id }} || {
           echo "❌ ERROR: Cannot access project ${{ github.event.inputs.project_id }}"
           echo "🔧 SOLUTION: Ensure the service account has the following roles on project ${{ github.event.inputs.project_id }}:"
-          echo "   • Kubernetes Engine Admin"
-          echo "   • Compute Admin" 
-          echo "   • Service Account User"
+          echo "   • Kubernetes Engine Admin (roles/container.admin)"
+          echo "   • Compute Admin (roles/compute.admin)" 
+          echo "   • Service Account User (roles/iam.serviceAccountUser)"
           echo "   • Project IAM Admin (if creating service accounts)"
           echo ""
           echo "📋 Run these commands in Google Cloud Console:"
@@ -138,13 +138,17 @@ jobs:
         
         echo "✅ Required APIs are enabled"
 
-    - name: Verify Service Account Exists
+    - name: Verify Service Account Configuration
       run: |
-        echo "🔧 Verifying service account exists in target project..."
-        gcloud iam service-accounts describe githubactions-sa@turnkey-guild-441104-f3.iam.gserviceaccount.com --project=${{ github.event.inputs.project_id }} || {
-          echo "⚠️ Service account not found in target project"
-          echo "🔧 Using cross-project service account from turnkey-guild-441104-f3"
-          echo "✅ This is expected for cross-project deployments"
+        echo "🔧 Service Account Configuration:"
+        echo "📧 Using: githubactions-sa@turnkey-guild-441104-f3.iam.gserviceaccount.com"
+        echo "🎯 Target Project: ${{ github.event.inputs.project_id }}"
+        echo "⚠️  Cross-project service account usage - ensure proper IAM bindings"
+        echo ""
+        echo "🔍 Checking if service account has required permissions..."
+        gcloud projects get-iam-policy ${{ github.event.inputs.project_id }}           --flatten="bindings[].members"           --format="table(bindings.role)"           --filter="bindings.members:githubactions-sa@turnkey-guild-441104-f3.iam.gserviceaccount.com" || {
+          echo "⚠️ Could not verify service account permissions"
+          echo "🔧 Ensure the service account has the required roles listed above"
         }
 
     - name: Check Regional Quotas and Resources
@@ -156,6 +160,7 @@ jobs:
         }
         echo "💾 Using pd-standard disks to avoid SSD quota issues"
         echo "🌐 Target zones: ${{ github.event.inputs.region }}-a, ${{ github.event.inputs.region }}-c"
+        echo "🔧 Service Account: githubactions-sa@turnkey-guild-441104-f3.iam.gserviceaccount.com"
         echo "✅ Region and quota check completed"
 
     - name: Terraform Format Check
@@ -218,6 +223,7 @@ jobs:
         echo "✅ GKE cluster '${{ github.event.inputs.cluster_name }}' is now running"
         echo "📍 Location: ${{ github.event.inputs.region }}"
         echo "🌐 Zones: ${{ github.event.inputs.region }}-a, ${{ github.event.inputs.region }}-c"
+        echo "🔐 Service Account: githubactions-sa@turnkey-guild-441104-f3.iam.gserviceaccount.com"
         echo "💾 State stored in: terraform-statefile-bucket-tf2/terraform/state/gke-cluster"
 
     # DESTROY OPERATIONS
@@ -263,8 +269,8 @@ jobs:
         echo "📍 Project: ${{ github.event.inputs.project_id }}"
         echo "🏷️ Cluster: ${{ github.event.inputs.cluster_name }}"
         echo "🌍 Region: ${{ github.event.inputs.region }}"
-        echo "💾 Backend: GCS (terraform-statefile-bucket-tf2)"
         echo "🔐 Service Account: githubactions-sa@turnkey-guild-441104-f3.iam.gserviceaccount.com"
+        echo "💾 Backend: GCS (terraform-statefile-bucket-tf2)"
         echo ""
         
         if [ "${{ github.event.inputs.terraform_action }}" = "apply" ] && [ "${{ steps.apply.outcome }}" = "success" ]; then

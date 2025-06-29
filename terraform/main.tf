@@ -21,7 +21,7 @@ locals {
   ]
 }
 
-# Create the GKE cluster
+# Create the GKE cluster with custom service account
 resource "google_container_cluster" "primary" {
   name     = var.cluster_name
   location = var.region
@@ -57,6 +57,15 @@ resource "google_container_cluster" "primary" {
   # Enable logging and monitoring
   logging_service    = "logging.googleapis.com/kubernetes"
   monitoring_service = "monitoring.googleapis.com/kubernetes"
+
+  # CRITICAL: Specify service account for the cluster's default node pool
+  # Even though we remove it, we need to specify the SA to avoid using default
+  node_config {
+    service_account = var.service_account_email
+    oauth_scopes = [
+      "https://www.googleapis.com/auth/cloud-platform"
+    ]
+  }
 }
 
 # Create the node pool with explicit service account
@@ -77,7 +86,7 @@ resource "google_container_node_pool" "primary_nodes" {
     disk_size_gb = var.disk_size
     disk_type    = "pd-standard"
 
-    # Use the GitHub Actions service account
+    # CRITICAL: Use the GitHub Actions service account for node pool
     service_account = var.service_account_email
     oauth_scopes = [
       "https://www.googleapis.com/auth/cloud-platform"

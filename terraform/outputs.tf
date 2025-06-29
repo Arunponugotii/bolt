@@ -26,7 +26,7 @@ output "node_pool_name" {
 }
 
 output "service_account_email" {
-  description = "Service account email used by nodes"
+  description = "Service account email used by cluster and nodes"
   value       = var.service_account_email
 }
 

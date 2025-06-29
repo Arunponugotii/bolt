@@ -52,7 +52,7 @@ variable "max_nodes" {
 }
 
 variable "service_account_email" {
-  description = "Service account email for GKE nodes"
+  description = "Service account email for GKE cluster and nodes"
   type        = string
   default     = "githubactions-sa@turnkey-guild-441104-f3.iam.gserviceaccount.com"
 }
