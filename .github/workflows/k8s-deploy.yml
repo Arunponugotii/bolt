@@ -1,4 +1,4 @@
-name: Kubernetes Application Deployment
+name: Kubernetes Deployment
 
 on:
   workflow_dispatch:
@@ -33,54 +33,6 @@ on:
         description: 'Kubernetes Namespace'
         required: true
         default: 'default'
-      app_name:
-        description: 'Application Name'
-        required: true
-        default: 'my-app'
-      frontend_image:
-        description: 'Frontend Docker Image'
-        required: true
-        default: 'gcr.io/my-project/frontend:latest'
-      backend_image:
-        description: 'Backend Docker Image'
-        required: true
-        default: 'gcr.io/my-project/backend:latest'
-      frontend_port:
-        description: 'Frontend Port'
-        required: true
-        default: '3000'
-      backend_port:
-        description: 'Backend Port'
-        required: true
-        default: '8080'
-      replicas:
-        description: 'Number of replicas'
-        required: true
-        default: '2'
-      enable_pv:
-        description: 'Enable Persistent Volume'
-        required: true
-        default: 'false'
-        type: choice
-        options:
-          - 'true'
-          - 'false'
-      storage_size:
-        description: 'Storage Size'
-        required: true
-        default: '10Gi'
-      enable_ingress:
-        description: 'Enable Ingress'
-        required: true
-        default: 'false'
-        type: choice
-        options:
-          - 'true'
-          - 'false'
-      domain:
-        description: 'Domain (optional)'
-        required: false
-        default: ''
 
 env:
   PROJECT_ID: ${{ github.event.inputs.project_id }}
@@ -88,7 +40,6 @@ env:
   REGION: ${{ github.event.inputs.region }}
   ZONE: ${{ github.event.inputs.zone }}
   NAMESPACE: ${{ github.event.inputs.namespace }}
-  APP_NAME: ${{ github.event.inputs.app_name }}
 
 jobs:
   kubernetes-operations:
@@ -112,119 +63,52 @@ jobs:
       with:
         version: 'v1.28.0'
 
-    - name: Verify Authentication and Project Access
-      run: |
-        echo "🔐 Verifying authentication..."
-        gcloud auth list
-        echo ""
-        echo "📋 Checking project access for: ${{ github.event.inputs.project_id }}"
-        gcloud projects describe ${{ github.event.inputs.project_id }} || {
-          echo "❌ ERROR: Cannot access project ${{ github.event.inputs.project_id }}"
-          echo "🔧 SOLUTION: Ensure the service account has access to the project"
-          exit 1
-        }
-        echo "✅ Project access verified"
-
     - name: Connect to GKE Cluster
       run: |
         echo "🔗 Connecting to GKE cluster..."
         gcloud container clusters get-credentials ${{ github.event.inputs.cluster_name }}           --region ${{ github.event.inputs.region }}           --project ${{ github.event.inputs.project_id }}
         
         echo "✅ Connected to cluster: ${{ github.event.inputs.cluster_name }}"
-        
-        # Verify cluster connection
         kubectl cluster-info
         kubectl get nodes
-
-    - name: Update Manifest Files with Dynamic Values
-      run: |
-        echo "🔧 Updating manifest files with provided values..."
-        
-        # Update image references in deployment files
-        sed -i "s|image: .*frontend.*|image: ${{ github.event.inputs.frontend_image }}|g" k8s/frontend-deployment.yaml
-        sed -i "s|image: .*backend.*|image: ${{ github.event.inputs.backend_image }}|g" k8s/backend-deployment.yaml
-        
-        # Update replica counts
-        sed -i "s|replicas: [0-9]*|replicas: ${{ github.event.inputs.replicas }}|g" k8s/frontend-deployment.yaml
-        sed -i "s|replicas: [0-9]*|replicas: ${{ github.event.inputs.replicas }}|g" k8s/backend-deployment.yaml
-        
-        # Update ports
-        sed -i "s|containerPort: [0-9]*|containerPort: ${{ github.event.inputs.frontend_port }}|g" k8s/frontend-deployment.yaml
-        sed -i "s|containerPort: [0-9]*|containerPort: ${{ github.event.inputs.backend_port }}|g" k8s/backend-deployment.yaml
-        sed -i "s|targetPort: [0-9]*|targetPort: ${{ github.event.inputs.frontend_port }}|g" k8s/frontend-service.yaml
-        sed -i "s|targetPort: [0-9]*|targetPort: ${{ github.event.inputs.backend_port }}|g" k8s/backend-service.yaml
-        
-        echo "✅ Manifest files updated with dynamic values"
 
     # STATUS OPERATION
     - name: Check Deployment Status
       if: github.event.inputs.k8s_action == 'status'
       run: |
         echo "📊 Checking deployment status..."
-        
         echo "🔍 Namespace status:"
         kubectl get namespace ${{ github.event.inputs.namespace }} || echo "Namespace does not exist"
-        
         echo ""
         echo "🚀 Deployment status:"
         kubectl get deployments -n ${{ github.event.inputs.namespace }} || echo "No deployments found"
-        
         echo ""
         echo "🌐 Service status:"
         kubectl get services -n ${{ github.event.inputs.namespace }} || echo "No services found"
-        
         echo ""
         echo "📦 Pod status:"
         kubectl get pods -n ${{ github.event.inputs.namespace }} || echo "No pods found"
-        
-        echo ""
-        echo "📋 Recent events:"
-        kubectl get events -n ${{ github.event.inputs.namespace }} --sort-by='.lastTimestamp' | tail -10 || echo "No events found"
-        
-        echo "✅ Status check completed"
 
     # DEPLOY OPERATION
     - name: Deploy Applications
       if: github.event.inputs.k8s_action == 'deploy'
       run: |
-        echo "🚀 Deploying applications to Kubernetes..."
-        
-        # Apply manifests in order
+        echo "🚀 Deploying selected manifests: db-init-job"
         echo "📁 Creating namespace..."
         kubectl apply -f k8s/namespace.yaml
         
-        # Apply persistent volume if enabled
-        if [ "${{ github.event.inputs.enable_pv }}" = "true" ] && [ -f "k8s/persistent-volume.yaml" ]; then
-          echo "💾 Creating persistent volume..."
-          kubectl apply -f k8s/persistent-volume.yaml
-        fi
-        
-        echo "🔧 Deploying backend..."
-        kubectl apply -f k8s/backend-deployment.yaml
-        kubectl apply -f k8s/backend-service.yaml
-        
-        echo "🌐 Deploying frontend..."
-        kubectl apply -f k8s/frontend-deployment.yaml
-        kubectl apply -f k8s/frontend-service.yaml
-        
-        # Apply ingress if enabled
-        if [ "${{ github.event.inputs.enable_ingress }}" = "true" ]; then
-          if [ -f "k8s/managed-certificate.yaml" ]; then
-            echo "🔒 Creating managed certificate..."
-            kubectl apply -f k8s/managed-certificate.yaml
+        # Apply all manifest files
+        for file in k8s/*.yaml; do
+          if [ "$file" != "k8s/namespace.yaml" ]; then
+            echo "📦 Applying $file..."
+            kubectl apply -f "$file"
           fi
-          if [ -f "k8s/ingress.yaml" ]; then
-            echo "🌍 Creating ingress..."
-            kubectl apply -f k8s/ingress.yaml
-          fi
-        fi
+        done
         
         echo "⏳ Waiting for deployments to be ready..."
-        kubectl wait --for=condition=available --timeout=300s deployment/${{ github.event.inputs.app_name }}-frontend -n ${{ github.event.inputs.namespace }}
-        kubectl wait --for=condition=available --timeout=300s deployment/${{ github.event.inputs.app_name }}-backend -n ${{ github.event.inputs.namespace }}
+        kubectl wait --for=condition=available --timeout=300s deployment --all -n ${{ github.event.inputs.namespace }} || true
         
         echo "✅ Applications deployed successfully!"
-        
         echo ""
         echo "📊 DEPLOYMENT SUMMARY:"
         kubectl get all -n ${{ github.event.inputs.namespace }}
@@ -235,24 +119,19 @@ jobs:
       run: |
         echo "🔄 Updating applications..."
         
-        # Force rolling update by updating deployments
-        echo "🔧 Updating backend deployment..."
-        kubectl apply -f k8s/backend-deployment.yaml
-        kubectl rollout restart deployment/${{ github.event.inputs.app_name }}-backend -n ${{ github.event.inputs.namespace }}
+        # Apply all manifest files
+        for file in k8s/*.yaml; do
+          echo "🔧 Updating $file..."
+          kubectl apply -f "$file"
+        done
         
-        echo "🌐 Updating frontend deployment..."
-        kubectl apply -f k8s/frontend-deployment.yaml
-        kubectl rollout restart deployment/${{ github.event.inputs.app_name }}-frontend -n ${{ github.event.inputs.namespace }}
+        # Restart deployments for rolling update
+        kubectl rollout restart deployment --all -n ${{ github.event.inputs.namespace }} || true
         
         echo "⏳ Waiting for rolling update to complete..."
-        kubectl rollout status deployment/${{ github.event.inputs.app_name }}-backend -n ${{ github.event.inputs.namespace }}
-        kubectl rollout status deployment/${{ github.event.inputs.app_name }}-frontend -n ${{ github.event.inputs.namespace }}
+        kubectl rollout status deployment --all -n ${{ github.event.inputs.namespace }} || true
         
         echo "✅ Applications updated successfully!"
-        
-        echo ""
-        echo "📊 UPDATE SUMMARY:"
-        kubectl get pods -n ${{ github.event.inputs.namespace }}
 
     # DELETE OPERATION
     - name: Delete Applications
@@ -260,38 +139,18 @@ jobs:
       run: |
         echo "🗑️ Deleting applications..."
         
-        # Delete in reverse order
-        if [ -f "k8s/ingress.yaml" ]; then
-          echo "🌍 Deleting ingress..."
-          kubectl delete -f k8s/ingress.yaml --ignore-not-found=true
-        fi
-        
-        if [ -f "k8s/managed-certificate.yaml" ]; then
-          echo "🔒 Deleting managed certificate..."
-          kubectl delete -f k8s/managed-certificate.yaml --ignore-not-found=true
-        fi
-        
-        echo "🌐 Deleting frontend..."
-        kubectl delete -f k8s/frontend-service.yaml --ignore-not-found=true
-        kubectl delete -f k8s/frontend-deployment.yaml --ignore-not-found=true
-        
-        echo "🔧 Deleting backend..."
-        kubectl delete -f k8s/backend-service.yaml --ignore-not-found=true
-        kubectl delete -f k8s/backend-deployment.yaml --ignore-not-found=true
-        
-        if [ -f "k8s/persistent-volume.yaml" ]; then
-          echo "💾 Deleting persistent volume..."
-          kubectl delete -f k8s/persistent-volume.yaml --ignore-not-found=true
-        fi
+        # Delete all resources except namespace
+        for file in k8s/*.yaml; do
+          if [ "$file" != "k8s/namespace.yaml" ]; then
+            echo "🗑️ Deleting $file..."
+            kubectl delete -f "$file" --ignore-not-found=true
+          fi
+        done
         
         echo "⏳ Waiting for resources to be deleted..."
-        kubectl wait --for=delete pod -l app=${{ github.event.inputs.app_name }} -n ${{ github.event.inputs.namespace }} --timeout=120s || true
+        kubectl wait --for=delete pod --all -n ${{ github.event.inputs.namespace }} --timeout=120s || true
         
         echo "✅ Applications deleted successfully!"
-        
-        echo ""
-        echo "📊 CLEANUP SUMMARY:"
-        kubectl get all -n ${{ github.event.inputs.namespace }}
 
     # FINAL SUMMARY
     - name: Operation Summary
@@ -305,27 +164,6 @@ jobs:
         echo "🏷️ Cluster: ${{ github.event.inputs.cluster_name }}"
         echo "🌍 Region: ${{ github.event.inputs.region }}"
         echo "📦 Namespace: ${{ github.event.inputs.namespace }}"
-        echo "🚀 App: ${{ github.event.inputs.app_name }}"
-        echo "🔧 Replicas: ${{ github.event.inputs.replicas }}"
-        echo "🖼️ Frontend: ${{ github.event.inputs.frontend_image }}"
-        echo "⚙️ Backend: ${{ github.event.inputs.backend_image }}"
-        echo ""
-        
-        if [ "${{ github.event.inputs.k8s_action }}" = "deploy" ]; then
-          echo "🎉 SUCCESS: Applications have been deployed!"
-          echo "🌐 Check service endpoints:"
-          echo "kubectl get services -n ${{ github.event.inputs.namespace }}"
-        elif [ "${{ github.event.inputs.k8s_action }}" = "update" ]; then
-          echo "🔄 SUCCESS: Applications have been updated!"
-          echo "📊 Check rollout status:"
-          echo "kubectl get pods -n ${{ github.event.inputs.namespace }}"
-        elif [ "${{ github.event.inputs.k8s_action }}" = "delete" ]; then
-          echo "🗑️ SUCCESS: Applications have been deleted!"
-          echo "🧹 All resources cleaned up from namespace"
-        elif [ "${{ github.event.inputs.k8s_action }}" = "status" ]; then
-          echo "📊 SUCCESS: Status check completed!"
-          echo "👀 Review the detailed status information above"
-        fi
-        
+        echo "🚀 Manifests: db-init-job"
         echo ""
         echo "🔗 Workflow URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"

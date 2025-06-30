@@ -3,5 +3,4 @@ kind: Namespace
 metadata:
   name: default
   labels:
-    app: my-app
     managed-by: iac-generator
