@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-app-backend
+  namespace: default
+  labels:
+    app: my-app
+    component: backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: my-app
+      component: backend
+  template:
+    metadata:
+      labels:
+        app: my-app
+        component: backend
+    spec:
+      containers:
+      - name: backend
+        image: gcr.io/my-project/backend:latest
+        ports:
+        - containerPort: 8080
+          name: http
+        env:
+        - name: NODE_ENV
+          value: "production"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "200m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
