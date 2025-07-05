@@ -165,16 +165,38 @@ jobs:
           echo "🔍 DETAILED RESOURCE INFORMATION:"
           echo "================================"
           
-          # Show details for each resource individually
+          # Show details for each resource individually with better error handling
+          echo "🔍 Attempting to show detailed resource information..."
+          resource_count=0
           terraform state list | while read resource; do
+            resource_count=$((resource_count + 1))
             echo ""
-            echo "📊 Resource: $resource"
+            echo "📊 Resource $resource_count: $resource"
             echo "-------------------------------------------"
-            terraform state show "$resource" 2>/dev/null || {
-              echo "⚠️ Unable to show details for $resource"
-              echo "🔧 Trying alternative method..."
-              terraform show -json | jq -r --arg res "$resource" '.values.root_module.resources[] | select(.address == $res) | {type: .type, name: .name, values: .values}' 2>/dev/null || echo "❌ No details available"
-            }
+            
+            # Method 1: Try terraform state show
+            if terraform state show "$resource" 2>/dev/null; then
+              echo "✅ Details retrieved successfully"
+            else
+              echo "⚠️ terraform state show failed, trying alternative methods..."
+              
+              # Method 2: Try terraform show with filtering
+              if terraform show 2>/dev/null | grep -A 20 "$resource"; then
+                echo "✅ Found resource in terraform show output"
+              else
+                echo "⚠️ Standard methods failed, trying JSON output..."
+                
+                # Method 3: JSON output with basic parsing
+                terraform show -json 2>/dev/null | jq -r '.values.root_module.resources[]?' 2>/dev/null | head -10 || {
+                  echo "❌ All methods failed for $resource"
+                  echo "🔧 This could be due to:"
+                  echo "   • Terraform state lock"
+                  echo "   • Permission issues"
+                  echo "   • Corrupted state file"
+                  echo "   • Resource not fully initialized"
+                }
+              fi
+            fi
             echo ""
           done
           
