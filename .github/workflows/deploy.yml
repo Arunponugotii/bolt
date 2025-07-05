@@ -274,7 +274,7 @@ jobs:
       if: github.event.inputs.terraform_action == 'destroy'
       run: |
         echo "🗑️ Destroying infrastructure..."
-        terraform destroy -auto-approve -input=false destroy-plan
+        terraform apply -auto-approve -input=false destroy-plan
         echo "✅ Destroy completed successfully"
         echo ""
         echo "🗑️ INFRASTRUCTURE DESTROYED:"
