@@ -140,7 +140,7 @@ jobs:
         terraform validate -no-color
         echo "✅ Configuration is valid"
 
-    # NEW: Show Current State File Contents
+    # NEW: Show Current State File Contents with Detailed Resource Info
     - name: Show Current State File
       id: show_state
       if: github.event.inputs.terraform_action == 'show-state' || github.event.inputs.terraform_action == 'list-resources' || github.event.inputs.terraform_action == 'plan' || github.event.inputs.terraform_action == 'apply'
@@ -162,14 +162,34 @@ jobs:
           done
           echo ""
           
-          echo "📊 DETAILED STATE INFORMATION:"
-          echo "-----------------------------"
-          terraform state show 2>/dev/null || echo "⚠️ No detailed state info available"
+          echo "🔍 DETAILED RESOURCE INFORMATION:"
+          echo "================================"
           
-          echo ""
+          # Show details for each resource individually
+          terraform state list | while read resource; do
+            echo ""
+            echo "📊 Resource: $resource"
+            echo "-------------------------------------------"
+            terraform state show "$resource" 2>/dev/null || {
+              echo "⚠️ Unable to show details for $resource"
+              echo "🔧 Trying alternative method..."
+              terraform show -json | jq -r --arg res "$resource" '.values.root_module.resources[] | select(.address == $res) | {type: .type, name: .name, values: .values}' 2>/dev/null || echo "❌ No details available"
+            }
+            echo ""
+          done
+          
           echo "🗂️ STATE FILE METADATA:"
           echo "----------------------"
-          terraform show -json | jq -r '.terraform_version, .serial, .lineage' 2>/dev/null || echo "⚠️ Unable to parse state metadata"
+          terraform show -json 2>/dev/null | jq -r '{terraform_version: .terraform_version, serial: .serial, lineage: .lineage, format_version: .format_version}' 2>/dev/null || echo "⚠️ Unable to parse state metadata"
+          
+          echo ""
+          echo "📈 RESOURCE COUNT SUMMARY:"
+          echo "-------------------------"
+          terraform state list | wc -l | xargs echo "Total Resources:"
+          terraform state list | grep "google_container_cluster" | wc -l | xargs echo "GKE Clusters:"
+          terraform state list | grep "google_container_node_pool" | wc -l | xargs echo "Node Pools:"
+          terraform state list | grep "google_service_account" | wc -l | xargs echo "Service Accounts:"
+          terraform state list | grep "google_project_iam" | wc -l | xargs echo "IAM Bindings:"
         else
           echo "📝 State file is empty or doesn't exist yet"
           echo "🔹 This is normal for new infrastructure"
@@ -284,7 +304,7 @@ jobs:
         terraform show tfplan
       continue-on-error: false
 
-    # APPLY OPERATION (Enhanced)
+    # APPLY OPERATION (Enhanced with Detailed Resource Info)
     - name: Terraform Apply
       id: apply
       if: github.event.inputs.terraform_action == 'apply'
@@ -303,17 +323,40 @@ jobs:
         echo "💾 State stored in: terraform-statefile-bucket-tf2/terraform/state/gke-cluster"
         echo ""
         
-        echo "🔍 CURRENT STATE AFTER APPLY:"
-        echo "----------------------------"
-        terraform state list
-        echo ""
+        echo "🔍 DETAILED RESOURCES CREATED:"
+        echo "=============================="
+        terraform state list | while read resource; do
+          echo ""
+          echo "📊 Resource: $resource"
+          echo "-------------------------------------------"
+          terraform state show "$resource" | head -50  # Show first 50 lines to avoid too much output
+          echo "... (truncated for readability)"
+          echo ""
+        done
         
-        echo "📋 CLUSTER INFORMATION:"
-        echo "---------------------"
+        echo "📋 CLUSTER DETAILS:"
+        echo "==================="
         gcloud container clusters describe ${{ github.event.inputs.cluster_name }} \
           --region ${{ github.event.inputs.region }} \
           --project ${{ github.event.inputs.project_id }} \
-          --format="value(name,status,currentNodeCount,endpoint)" 2>/dev/null || echo "⚠️ Unable to get cluster details"
+          --format="table(name,status,currentNodeCount,endpoint,masterVersion)" 2>/dev/null || echo "⚠️ Unable to get cluster details"
+        
+        echo ""
+        echo "🌐 NODE POOL DETAILS:"
+        echo "===================="
+        gcloud container node-pools list \
+          --cluster=${{ github.event.inputs.cluster_name }} \
+          --region=${{ github.event.inputs.region }} \
+          --project=${{ github.event.inputs.project_id }} \
+          --format="table(name,status,machineType,diskSizeGb,nodeCount)" 2>/dev/null || echo "⚠️ Unable to get node pool details"
+        
+        echo ""
+        echo "🔐 SERVICE ACCOUNT DETAILS:"
+        echo "=========================="
+        terraform state list | grep google_service_account | while read sa_resource; do
+          echo "Service Account: $sa_resource"
+          terraform state show "$sa_resource" | grep -E "(email|unique_id|display_name)" || echo "⚠️ No service account details"
+        done
 
     # DESTROY OPERATIONS (Enhanced)
     - name: Terraform Destroy Plan
@@ -366,7 +409,7 @@ jobs:
         echo "----------------------"
         terraform state list || echo "✅ State is now empty"
 
-    # NEW: Final State Summary
+    # NEW: Final State Summary with Detailed Resource Info
     - name: Final State Summary
       if: always()
       run: |
@@ -386,6 +429,33 @@ jobs:
           terraform state list | while read resource; do
             echo "🔹 $resource"
           done
+          echo ""
+          
+          echo "📈 RESOURCE SUMMARY:"
+          echo "-------------------"
+          total_resources=$(terraform state list | wc -l)
+          gke_clusters=$(terraform state list | grep "google_container_cluster" | wc -l)
+          node_pools=$(terraform state list | grep "google_container_node_pool" | wc -l)
+          service_accounts=$(terraform state list | grep "google_service_account" | wc -l)
+          iam_bindings=$(terraform state list | grep "google_project_iam" | wc -l)
+          
+          echo "📊 Total Resources: $total_resources"
+          echo "🏗️ GKE Clusters: $gke_clusters"
+          echo "🔗 Node Pools: $node_pools" 
+          echo "🔐 Service Accounts: $service_accounts"
+          echo "👥 IAM Bindings: $iam_bindings"
+          echo ""
+          
+          if [ "$gke_clusters" -gt 0 ]; then
+            echo "🌐 CLUSTER CONNECTION INFO:"
+            echo "--------------------------"
+            echo "🔗 Connect command:"
+            echo "gcloud container clusters get-credentials ${{ github.event.inputs.cluster_name }} --region ${{ github.event.inputs.region }} --project ${{ github.event.inputs.project_id }}"
+            echo ""
+            echo "📋 Verify connection:"
+            echo "kubectl get nodes"
+            echo "kubectl get pods --all-namespaces"
+          fi
         else
           echo "📝 No resources in state (empty state)"
         fi
@@ -398,8 +468,5 @@ jobs:
         echo "📄 Show plan: terraform plan"
         echo "🚀 Apply changes: terraform apply"
         echo "🗑️ Destroy all: terraform destroy"
-        echo ""
-        echo "🌐 Connect to cluster:"
-        echo "gcloud container clusters get-credentials ${{ github.event.inputs.cluster_name }} --region ${{ github.event.inputs.region }} --project ${{ github.event.inputs.project_id }}"
         echo ""
         echo "🔗 Workflow URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
