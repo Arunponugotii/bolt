@@ -264,7 +264,7 @@ jobs:
         terraform show resource-plan 2>/dev/null | head -100 || echo "⚠️ Unable to show detailed plan"
       continue-on-error: true
 
-    # NEW: Inspect Remote State Backend
+    # NEW: Inspect Remote State Backend with Direct GCS Access
     - name: Inspect Remote State Backend
       id: inspect_backend
       if: github.event.inputs.terraform_action == 'show-state' || github.event.inputs.terraform_action == 'list-resources'
@@ -276,13 +276,34 @@ jobs:
         echo "🪣 Bucket: terraform-statefile-bucket-tf2"
         echo "📁 Prefix: terraform/state/gke-cluster"
         echo "🌍 Project: ${{ github.event.inputs.project_id }}"
+        echo "🔗 Direct URL: https://storage.cloud.google.com/terraform-statefile-bucket-tf2/terraform/state/gke-cluster/default.tfstate"
         echo ""
         
-        echo "🔍 Checking bucket contents..."
+        echo "🔍 Testing direct GCS access..."
         gsutil ls -la gs://terraform-statefile-bucket-tf2/terraform/state/gke-cluster/ 2>/dev/null || {
           echo "⚠️ Unable to list bucket contents"
           echo "🔧 Ensure the service account has Storage Object Viewer role"
         }
+        
+        echo ""
+        echo "📥 Attempting to download state file directly..."
+        if gsutil cp gs://terraform-statefile-bucket-tf2/terraform/state/gke-cluster/default.tfstate ./temp-state.tfstate 2>/dev/null; then
+          echo "✅ Successfully downloaded state file"
+          echo "📊 State file size: $(wc -c < ./temp-state.tfstate) bytes"
+          echo "🔍 State file preview (first 500 chars):"
+          head -c 500 ./temp-state.tfstate
+          echo ""
+          echo "..."
+        else
+          echo "❌ Failed to download state file"
+          echo "🔧 Check service account permissions for:"
+          echo "   • roles/storage.objectViewer"
+          echo "   • roles/storage.admin (if needed)"
+        fi
+        
+        echo ""
+        echo "🔧 Service Account Permissions Check:"
+        echo "gcloud projects get-iam-policy ${{ github.event.inputs.project_id }} --flatten='bindings[].members' --filter='bindings.members:githubactions-sa@turnkey-guild-441104-f3.iam.gserviceaccount.com'"
         
         echo ""
         echo "📋 Backend Configuration:"
