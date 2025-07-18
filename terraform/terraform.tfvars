@@ -1,7 +1,6 @@
-project_id = "turnkey-guild-441104-f3"
-cluster_name = "my-gke-cluster"
-region = "us-central1"
-node_count = 2
+project_id   = "xxa"
+cluster_name = "xaxa"
+region       = "us-east1"
 machine_type = "e2-medium"
-disk_size = 100
-service_account_email = "githubactions-sa@turnkey-guild-441104-f3.iam.gserviceaccount.com"
+node_count   = 2
+disk_size    = 100
