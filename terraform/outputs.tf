@@ -14,28 +14,12 @@ output "cluster_location" {
   value       = google_container_cluster.primary.location
 }
 
-output "cluster_ca_certificate" {
-  description = "GKE cluster CA certificate"
-  value       = google_container_cluster.primary.master_auth.0.cluster_ca_certificate
-  sensitive   = true
-}
-
 output "node_pool_name" {
-  description = "GKE node pool name"
+  description = "Node pool name"
   value       = google_container_node_pool.primary_nodes.name
 }
 
-output "service_account_email" {
-  description = "Service account email used by cluster and nodes"
-  value       = var.service_account_email
-}
-
-output "node_zones" {
-  description = "Node zones for the cluster"
-  value       = local.node_zones
-}
-
-output "deletion_protection" {
-  description = "Deletion protection status"
-  value       = google_container_cluster.primary.deletion_protection
+output "kubectl_config_command" {
+  description = "Command to configure kubectl"
+  value       = "gcloud container clusters get-credentials ${google_container_cluster.primary.name} --region ${google_container_cluster.primary.location} --project ${var.project_id}"
 }
