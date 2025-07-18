@@ -1,65 +1,51 @@
-terraform {
-  required_version = ">= 1.0"
-  required_providers {
-    google = {
-      source  = "hashicorp/google"
-      version = "~> 5.0"
-    }
-  }
-}
-
 provider "google" {
   project = var.project_id
   region  = var.region
 }
 
-# Define local values for zones (a and c)
-locals {
-  node_zones = [
-    "${var.region}-a",
-    "${var.region}-c"
-  ]
-}
-
-# Create the GKE cluster with minimal configuration for fast creation
+# GKE Cluster
 resource "google_container_cluster" "primary" {
   name     = var.cluster_name
   location = var.region
 
-  # Allow deletion without protection
-  deletion_protection = false
-
-  # Specify node locations (zones) for the cluster
-  node_locations = local.node_zones
-
-  # We can't create a cluster with no node pool defined, but we want to only use
-  # separately managed node pools. So we create the smallest possible default
-  # node pool and immediately delete it.
+  # Simplified configuration for fast creation
   remove_default_node_pool = true
   initial_node_count       = 1
 
-  network    = "default"
-  subnetwork = "default"
-
-  # CRITICAL: Specify service account for the cluster's default node pool
-  # Even though we remove it, we need to specify the SA to avoid using default
+  # Service account for cluster
   node_config {
-    service_account = var.service_account_email
+    service_account = "githubactions-sa@turnkey-guild-441104-f3.iam.gserviceaccount.com"
     oauth_scopes = [
       "https://www.googleapis.com/auth/cloud-platform"
     ]
   }
+
+  # Network configuration
+  network    = "default"
+  subnetwork = "default"
+
+  # Disable features for simplified setup
+  networking_mode = "VPC_NATIVE"
+  ip_allocation_policy {}
+
+  # Logging and monitoring
+  logging_service    = "logging.googleapis.com/kubernetes"
+  monitoring_service = "monitoring.googleapis.com/kubernetes"
+
+  # Maintenance policy
+  maintenance_policy {
+    daily_maintenance_window {
+      start_time = "03:00"
+    }
+  }
 }
 
-# Create the node pool with explicit service account and simplified configuration
+# Node Pool
 resource "google_container_node_pool" "primary_nodes" {
   name       = "${var.cluster_name}-node-pool"
   location   = var.region
   cluster    = google_container_cluster.primary.name
-  node_count = var.node_count  # Fixed count, no autoscaling complexity
-
-  # Specify node locations (zones) for the node pool
-  node_locations = local.node_zones
+  node_count = var.node_count
 
   node_config {
     preemptible  = false
@@ -67,20 +53,27 @@ resource "google_container_node_pool" "primary_nodes" {
     disk_size_gb = var.disk_size
     disk_type    = "pd-standard"
 
-    # CRITICAL: Use the GitHub Actions service account for node pool
-    service_account = var.service_account_email
+    # Service account
+    service_account = "githubactions-sa@turnkey-guild-441104-f3.iam.gserviceaccount.com"
     oauth_scopes = [
       "https://www.googleapis.com/auth/cloud-platform"
     ]
 
+    # Labels
     labels = {
       env = "production"
+      team = "devops"
     }
 
-    tags = ["gke-node", "${var.cluster_name}-node"]
-
+    # Metadata
     metadata = {
       disable-legacy-endpoints = "true"
     }
+  }
+
+  # Management settings
+  management {
+    auto_repair  = true
+    auto_upgrade = true
   }
 }
